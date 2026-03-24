@@ -43,14 +43,14 @@ describe('Payment Code Utilities', () => {
   })
 
   describe('generateActivationCode', () => {
-    it('should generate 6 character code', () => {
+    it('should generate 8 character code', () => {
       const code = generateActivationCode()
-      expect(code.length).toBe(6)
+      expect(code.length).toBe(8)
     })
 
     it('should only contain uppercase letters', () => {
       const code = generateActivationCode()
-      expect(code).toMatch(/^[A-Z]{6}$/)
+      expect(code).toMatch(/^[A-Z]{8}$/)
     })
   })
 

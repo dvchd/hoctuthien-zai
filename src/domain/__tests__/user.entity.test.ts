@@ -29,7 +29,6 @@ describe('UserEntity', () => {
       expect(user.avatarUrl).toBeNull()
       expect(user.phone).toBeNull()
       expect(user.bio).toBeNull()
-      expect(user.expertise).toBeNull()
     })
 
     it('should set skills to empty array by default', () => {
@@ -47,7 +46,6 @@ describe('UserEntity', () => {
         status: UserStatus.ACTIVE,
         bio: 'Test bio',
         skills: ['JavaScript', 'TypeScript'],
-        expertise: 'Web Development',
       })
 
       expect(fullUser.googleId).toBe('google-123')
@@ -56,7 +54,6 @@ describe('UserEntity', () => {
       expect(fullUser.phone).toBe('0123456789')
       expect(fullUser.bio).toBe('Test bio')
       expect(fullUser.skills).toEqual(['JavaScript', 'TypeScript'])
-      expect(fullUser.expertise).toBe('Web Development')
     })
   })
 
@@ -326,7 +323,6 @@ describe('UserEntity', () => {
       expect(obj).toHaveProperty('status', UserStatus.ACTIVE)
       expect(obj).toHaveProperty('bio', null)
       expect(obj).toHaveProperty('skills', null) // Empty array becomes null
-      expect(obj).toHaveProperty('expertise', null)
     })
 
     it('should serialize skills as JSON string', () => {
