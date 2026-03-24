@@ -57,8 +57,177 @@ export class PaymentUseCase {
   // ==================== Activation Payment ====================
 
   /**
-   * Request account activation
-   * Creates an activation request with payment code and QR
+   * Get or create activation request
+   * Reuses existing activation code if valid, creates new one if expired or not exists
+   * @param data Request data with userId
+   * @returns Activation request result with QR code
+   */
+  async getOrCreateActivation(data: IRequestActivationDto): Promise<IActivationRequestResult> {
+    const { userId } = data;
+
+    try {
+      console.log(`[PaymentUseCase] Getting activation for user: ${userId}`);
+
+      // Get user
+      const user = await db.user.findUnique({
+        where: { id: userId },
+      });
+
+      if (!user) {
+        return {
+          success: false,
+          error: 'User not found',
+        };
+      }
+
+      // Check if already activated
+      if (user.isActivated) {
+        return {
+          success: false,
+          error: 'Account is already activated',
+          activated: true,
+        };
+      }
+
+      // Check for existing pending activation transaction
+      const pendingTransaction = await db.paymentTransaction.findFirst({
+        where: {
+          userId,
+          type: TransactionType.ACTIVATION,
+          status: TransactionStatus.PENDING,
+        },
+        orderBy: { createdAt: 'desc' },
+      });
+
+      // Check if user has valid activation code (not expired)
+      const hasValidCode = user.activationCode && 
+        user.activationCodeExpiry && 
+        !isCodeExpired(user.activationCodeExpiry);
+
+      // If has valid code and pending transaction, reuse them
+      if (hasValidCode && pendingTransaction?.paymentCode) {
+        console.log(`[PaymentUseCase] Reusing existing activation code: ${user.activationCode}`);
+
+        const accountNo = process.env.CHARITY_ACCOUNT_NO || '2022';
+        const accountName = process.env.CHARITY_ACCOUNT_NAME || 'HOI CHU THAP DO VIET NAM';
+
+        // Generate QR with existing code
+        const qrContent = `HOCTUTHIEN KICHHOAT ${user.activationCode}`;
+        const qrCodeUrl = VietQRService.generateQRCodeUrl({
+          accountNo,
+          accountName,
+          amount: PAYMENT_CONFIG.activationAmount,
+          content: qrContent,
+          bankCode: PAYMENT_CONFIG.defaultBankCode,
+        });
+
+        const deepLink = VietQRService.generateDeepLink({
+          accountNo,
+          accountName,
+          amount: PAYMENT_CONFIG.activationAmount,
+          content: qrContent,
+          bankCode: PAYMENT_CONFIG.defaultBankCode,
+        });
+
+        return {
+          success: true,
+          activationCode: user.activationCode,
+          paymentCode: pendingTransaction.paymentCode,
+          qrCodeUrl,
+          deepLink,
+          amount: PAYMENT_CONFIG.activationAmount,
+          accountNo,
+          accountName,
+          expiresAt: user.activationCodeExpiry,
+        };
+      }
+
+      // Need to create new activation code
+      console.log(`[PaymentUseCase] Creating new activation code for user: ${userId}`);
+
+      // Generate new activation code
+      const activationCode = generateActivationCode();
+      const paymentCode = generateActivationPaymentCode();
+      const expiresAt = calculateCodeExpiry(PAYMENT_CONFIG.activationCodeExpiryHours);
+
+      // Update user with new activation code
+      await db.user.update({
+        where: { id: userId },
+        data: {
+          activationCode,
+          activationCodeExpiry: expiresAt,
+        },
+      });
+
+      // Mark old pending transactions as failed (if any)
+      if (pendingTransaction) {
+        await db.paymentTransaction.update({
+          where: { id: pendingTransaction.id },
+          data: {
+            status: TransactionStatus.FAILED,
+            updatedBy: 'system',
+          },
+        });
+      }
+
+      // Create new pending transaction
+      await db.paymentTransaction.create({
+        data: {
+          userId,
+          type: TransactionType.ACTIVATION,
+          amount: PAYMENT_CONFIG.activationAmount,
+          paymentCode,
+          status: TransactionStatus.PENDING,
+          createdBy: userId,
+        },
+      });
+
+      // Generate QR code
+      const accountNo = process.env.CHARITY_ACCOUNT_NO || '2022';
+      const accountName = process.env.CHARITY_ACCOUNT_NAME || 'HOI CHU THAP DO VIET NAM';
+
+      const qrContent = `HOCTUTHIEN KICHHOAT ${activationCode}`;
+      const qrCodeUrl = VietQRService.generateQRCodeUrl({
+        accountNo,
+        accountName,
+        amount: PAYMENT_CONFIG.activationAmount,
+        content: qrContent,
+        bankCode: PAYMENT_CONFIG.defaultBankCode,
+      });
+
+      const deepLink = VietQRService.generateDeepLink({
+        accountNo,
+        accountName,
+        amount: PAYMENT_CONFIG.activationAmount,
+        content: qrContent,
+        bankCode: PAYMENT_CONFIG.defaultBankCode,
+      });
+
+      console.log(`[PaymentUseCase] New activation code created: ${activationCode}`);
+
+      return {
+        success: true,
+        activationCode,
+        paymentCode,
+        qrCodeUrl,
+        deepLink,
+        amount: PAYMENT_CONFIG.activationAmount,
+        accountNo,
+        accountName,
+        expiresAt,
+      };
+    } catch (error) {
+      console.error('[PaymentUseCase] Error getting activation:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to get activation request',
+      };
+    }
+  }
+
+  /**
+   * Request account activation (legacy - creates new code every time)
+   * @deprecated Use getOrCreateActivation instead
    * @param data Request data with userId
    * @returns Activation request result with QR code
    */

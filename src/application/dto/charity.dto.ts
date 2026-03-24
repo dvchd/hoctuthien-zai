@@ -82,6 +82,7 @@ export interface IRequestActivationDto {
  */
 export interface IActivationRequestResult {
   success: boolean;
+  activated?: boolean; // True if already activated
   activationCode?: string;
   paymentCode?: string;
   qrCodeUrl?: string;

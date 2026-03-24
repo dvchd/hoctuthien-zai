@@ -8,13 +8,14 @@
 /**
  * Charity account number (4-digit account from Thiện Nguyện App)
  * Can be overridden via environment variable
+ * Default: 2022 (Hội Chữ thập đỏ Việt Nam)
  */
-export const CHARITY_ACCOUNT_NO = process.env.CHARITY_ACCOUNT_NO || "0606";
+export const CHARITY_ACCOUNT_NO = process.env.CHARITY_ACCOUNT_NO || "2022";
 
 /**
  * Charity account holder name
  */
-export const CHARITY_ACCOUNT_NAME = process.env.CHARITY_ACCOUNT_NAME || "MAT TRAN TO QUOC VIET NAM";
+export const CHARITY_ACCOUNT_NAME = process.env.CHARITY_ACCOUNT_NAME || "HOI CHU THAP DO VIET NAM";
 
 /**
  * Charity bank name

@@ -7,20 +7,12 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getAuthSession } from '@/lib/auth';
 import { getPaymentUseCase } from '@/application/use-cases/payment.use-case';
 import { db } from '@/lib/db';
-import {
-  CHARITY_ACCOUNT_NO,
-  CHARITY_ACCOUNT_NAME,
-  CHARITY_BANK,
-  ACTIVATION_AMOUNT,
-} from '@/lib/constants';
-import { VietQRService } from '@/infrastructure/external/viet-qr';
-import { generateActivationPaymentCode, calculateCodeExpiry, ACTIVATION_CODE_LENGTH, generateRandomLetters } from '@/application/utils/payment-code';
 import { TransactionType, TransactionStatus } from '@prisma/client';
 
 /**
  * GET /api/activation
  * Get activation information for the current user
- * Creates a new activation request if one doesn't exist
+ * Uses PaymentUseCase to handle code reuse logic
  */
 export async function GET() {
   try {
@@ -35,7 +27,7 @@ export async function GET() {
 
     const userId = session.user.id;
 
-    // Get user
+    // Get user for additional info
     const user = await db.user.findUnique({
       where: { id: userId },
     });
@@ -63,96 +55,24 @@ export async function GET() {
       });
     }
 
-    // Check for existing pending activation transaction
-    let pendingTransaction = await db.paymentTransaction.findFirst({
-      where: {
-        userId,
-        type: TransactionType.ACTIVATION,
-        status: TransactionStatus.PENDING,
-      },
-      orderBy: { createdAt: 'desc' },
-    });
+    // Use PaymentUseCase to get or create activation
+    const paymentUseCase = getPaymentUseCase();
+    const result = await paymentUseCase.getOrCreateActivation({ userId });
 
-    // Generate activation code if user doesn't have one or it's expired
-    let activationCode = user.activationCode;
-    let paymentCode = pendingTransaction?.paymentCode;
-    let expiresAt = user.activationCodeExpiry;
-
-    // If no activation code or expired, generate new one
-    if (!activationCode || !expiresAt || new Date() > new Date(expiresAt)) {
-      activationCode = generateRandomLetters(ACTIVATION_CODE_LENGTH);
-      paymentCode = generateActivationPaymentCode();
-      expiresAt = calculateCodeExpiry(24); // 24 hours
-
-      // Update user with new activation code
-      await db.user.update({
-        where: { id: userId },
-        data: {
-          activationCode,
-          activationCodeExpiry: expiresAt,
-        },
-      });
-
-      // Create new pending transaction
-      pendingTransaction = await db.paymentTransaction.create({
-        data: {
-          userId,
-          type: TransactionType.ACTIVATION,
-          amount: ACTIVATION_AMOUNT,
-          paymentCode,
-          status: TransactionStatus.PENDING,
-          createdBy: userId,
-        },
-      });
-    } else if (!pendingTransaction) {
-      // User has code but no transaction, create one
-      paymentCode = generateActivationPaymentCode();
-      pendingTransaction = await db.paymentTransaction.create({
-        data: {
-          userId,
-          type: TransactionType.ACTIVATION,
-          amount: ACTIVATION_AMOUNT,
-          paymentCode,
-          status: TransactionStatus.PENDING,
-          createdBy: userId,
-        },
-      });
+    if (!result.success) {
+      return NextResponse.json(result, { status: 400 });
     }
 
-    // Generate QR code URL
-    const qrContent = `HOCTUTHIEN KICHHOAT ${activationCode}`;
-    const qrCodeUrl = VietQRService.generateQRCodeUrl({
-      accountNo: CHARITY_ACCOUNT_NO,
-      accountName: CHARITY_ACCOUNT_NAME,
-      amount: ACTIVATION_AMOUNT,
-      content: qrContent,
-      bankCode: 'mbbank',
-    });
-
-    // Generate deep link for banking apps
-    const deepLink = VietQRService.generateDeepLink({
-      accountNo: CHARITY_ACCOUNT_NO,
-      accountName: CHARITY_ACCOUNT_NAME,
-      amount: ACTIVATION_AMOUNT,
-      content: qrContent,
-      bankCode: 'mbbank',
-    });
-
+    // Return activation info with additional fields for frontend
     return NextResponse.json({
-      success: true,
+      ...result,
       activated: false,
-      activationCode,
-      paymentCode: pendingTransaction?.paymentCode || paymentCode,
-      qrCodeUrl,
-      deepLink,
       accountInfo: {
-        accountNo: CHARITY_ACCOUNT_NO,
-        accountName: CHARITY_ACCOUNT_NAME,
-        bank: CHARITY_BANK,
+        accountNo: result.accountNo,
+        accountName: result.accountName,
+        bank: 'MBBank',
       },
-      amount: ACTIVATION_AMOUNT,
-      transferContent: qrContent,
-      expiresAt,
+      transferContent: `HOCTUTHIEN KICHHOAT ${result.activationCode}`,
     });
   } catch (error) {
     console.error('[Activation API] Error:', error);

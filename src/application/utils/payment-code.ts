@@ -14,9 +14,9 @@
 const PAYMENT_CODE_CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
 
 /**
- * Length of activation code (6 characters)
+ * Length of activation code (8 characters)
  */
-export const ACTIVATION_CODE_LENGTH = 6;
+export const ACTIVATION_CODE_LENGTH = 8;
 
 /**
  * Length of the random suffix in payment codes (6 characters)
